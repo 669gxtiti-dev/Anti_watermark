@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WatermarkOut Pro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--border:#242424;
+    --accent:#ff3c3c;--accent2:#ff7a3c;--green:#22c55e;
+    --text:#f0f0f0;--muted:#666;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px 60px;}
+  header{width:100%;max-width:780px;margin-bottom:28px;display:flex;align-items:baseline;gap:14px;}
+  header h1{font-size:1.9rem;font-weight:800;letter-spacing:-.03em;}
+  header h1 span{color:var(--accent);}
+  .tag{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:4px;}
+  .drop-zone{border:2px dashed var(--border);border-radius:18px;padding:50px 40px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;width:100%;max-width:780px;margin-bottom:20px;}
+  .drop-zone:hover{border-color:#444;background:rgba(255,255,255,.02);}
+  .drop-zone.drag-over{border-color:var(--accent);background:rgba(255,60,60,.05);}
+  .drop-zone.hidden{display:none;}
+  .drop-icon{font-size:2.8rem;margin-bottom:12px;}
+  .drop-label{font-size:1rem;font-weight:700;}
+  .drop-sub{color:var(--muted);font-size:.82rem;margin-top:6px;font-family:'DM Mono',monospace;}
+  .mode-bar{display:none;width:100%;max-width:780px;margin-bottom:14px;gap:10px;align-items:center;}
+  .mode-bar.visible{display:flex;}
+  .mode-btn{flex:1;padding:10px 0;border-radius:10px;border:2px solid var(--border);background:var(--bg2);color:var(--muted);font-family:'Syne',sans-serif;font-size:.88rem;font-weight:700;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:7px;}
+  .mode-btn.active-wm{border-color:var(--accent);color:var(--accent);background:rgba(255,60,60,.08);}
+  .mode-btn.active-crop{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.08);}
+  #canvas-wrap{position:relative;display:none;max-width:780px;width:100%;margin-bottom:12px;border-radius:14px;overflow:hidden;background:#000;user-select:none;}
+  #canvas{width:100%;display:block;cursor:crosshair;}
+  .sel-box{position:absolute;pointer-events:none;border-radius:2px;display:none;}
+  #sel-wm{border:2px solid #ff3c3c;background:rgba(255,60,60,.3);}
+  #sel-crop{border:2px dashed #22c55e;background:rgba(34,197,94,.25);}
+  .hint{display:none;width:100%;max-width:780px;margin-bottom:12px;font-family:'DM Mono',monospace;font-size:.8rem;color:var(--muted);}
+  .action-bar{display:none;width:100%;max-width:780px;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .action-bar.visible{display:flex;}
+  .btn{padding:11px 22px;border-radius:10px;border:none;font-size:.9rem;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700;transition:opacity .15s,transform .1s;display:flex;align-items:center;gap:7px;}
+  .btn:hover:not(:disabled){opacity:.88;transform:translateY(-1px);}
+  .btn:disabled{opacity:.4;cursor:default;}
+  .btn-red{background:var(--accent);color:#fff;}
+  .btn-green{background:var(--green);color:#000;}
+  .btn-gray{background:var(--bg3);color:var(--muted);border:1px solid var(--border);}
+  #progress-wrap{display:none;width:100%;max-width:780px;margin-bottom:14px;}
+  .progress-bar-bg{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:8px;}
+  .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;width:0%;transition:width .3s;}
+  #status{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted);}
+  #download-wrap{display:none;width:100%;max-width:780px;}
+  #dl-btn{display:flex;align-items:center;gap:10px;background:var(--green);color:#000;padding:14px 28px;border-radius:12px;text-decoration:none;font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;transition:opacity .15s;}
+  #dl-btn:hover{opacity:.88;}
+  #codec-badge{position:fixed;top:14px;right:14px;font-family:'DM Mono',monospace;font-size:.7rem;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);color:var(--muted);z-index:999;transition:all .3s;}
+  #codec-badge.ready{border-color:var(--green);color:var(--green);}
+  #codec-badge.warn{border-color:var(--accent2);color:var(--accent2);}
+  #codec-badge.loading{border-color:#3b82f6;color:#3b82f6;}
+  .ffmpeg-banner{width:100%;max-width:780px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-family:'DM Mono',monospace;font-size:.78rem;color:#3b82f6;display:none;}
+  .ffmpeg-banner.visible{display:block;}
+</style>
+</head>
+<body>
+<div id="codec-badge">⚙ Chargement FFmpeg…</div>
+<header>
+  <h1>Watermark<span>Out</span></h1>
+  <span class="tag" id="codec-tag">v3 · FFmpeg</span>
+</header>
+
+<div class="ffmpeg-banner" id="ffmpeg-banner">
+  ⚡ FFmpeg chargé depuis le cache — export MP4 rapide prêt !
+</div>
+
+<div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+  <div class="drop-icon">🎬</div>
+  <div class="drop-label">Clique ou glisse ta vidéo ici</div>
+  <div class="drop-sub">MP4 · MOV · AVI · MKV · WebM</div>
+  <input type="file" id="file-input" accept="video/*" style="display:none">
+</div>
+
+<div class="mode-bar" id="mode-bar">
+  <button class="mode-btn active-wm" id="btn-mode-wm">🗑️ Supprimer watermark</button>
+  <button class="mode-btn" id="btn-mode-crop">✂️ Recadrer vidéo</button>
+</div>
+<div id="canvas-wrap">
+  <canvas id="canvas"></canvas>
+  <div class="sel-box" id="sel-wm"></div>
+  <div class="sel-box" id="sel-crop"></div>
+</div>
+<p class="hint" id="hint">🖱 Sélectionne la zone du watermark à effacer</p>
+<div class="action-bar" id="action-bar">
+  <button class="btn btn-red" id="btn-remove" disabled>🗑️ Effacer watermark</button>
+  <button class="btn btn-green" id="btn-crop-export" style="display:none" disabled>✂️ Exporter recadré</button>
+  <button class="btn btn-gray" id="btn-reset">↩ Recommencer</button>
+</div>
+<div id="progress-wrap">
+  <div class="progress-bar-bg"><div class="progress-bar-fill" id="pbar"></div></div>
+  <div id="status">…</div>
+</div>
+<div id="download-wrap">
+  <a id="dl-btn" href="#" download="output.mp4">⬇️ Télécharger output.mp4</a>
+</div>
+
+<script>
+// ── FFmpeg.wasm chargé depuis fichiers locaux du repo ─────────────────────────
+const FFMPEG_CORE = './ffmpeg-core.js';
+const badge = document.getElementById('codec-badge');
+const codecTag = document.getElementById('codec-tag');
+const ffmpegBanner = document.getElementById('ffmpeg-banner');
+
+let ffmpegReady = false;
+let ffmpeg = null;
+
+async function loadFFmpeg() {
+  try {
+    badge.className = 'loading';
+    badge.textContent = '⏳ Chargement FFmpeg…';
+
+    // Charger le script FFmpeg.wasm depuis le repo local
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = './ffmpeg.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('ffmpeg.min.js introuvable'));
+      document.head.appendChild(s);
+    });
+
+    ffmpeg = FFmpeg.createFFmpeg({
+      corePath: FFMPEG_CORE,
+      log: false,
+      progress: ({ ratio }) => {
+        const pct = Math.min(99, ratio * 100);
+        setStatus(`⚡ FFmpeg encode… ${pct.toFixed(0)}%`, pct);
+      }
+    });
+
+    await ffmpeg.load();
+    ffmpegReady = true;
+    badge.className = 'ready';
+    badge.textContent = '✓ FFmpeg prêt';
+    ffmpegBanner.classList.add('visible');
+    codecTag.textContent = 'v3 · FFmpeg MP4';
+  } catch(e) {
+    // Fallback WebCodecs si FFmpeg pas dispo
+    badge.className = 'warn';
+    badge.textContent = '⚠ Mode fallback';
+    codecTag.textContent = 'v3 · WebCodecs';
+    console.warn('FFmpeg non disponible, fallback WebCodecs:', e);
+  }
+}
+
+loadFFmpeg();
+
+// ── Variables ─────────────────────────────────────────────────────────────────
+let videoFile=null, videoEl=null, mode='wm', selWm=null, selCrop=null;
+let isDrawing=false, startX=0, startY=0;
+
+const fileInput=document.getElementById('file-input');
+const dropZone=document.getElementById('drop-zone');
+const canvasWrap=document.getElementById('canvas-wrap');
+const canvas=document.getElementById('canvas');
+const selWmEl=document.getElementById('sel-wm');
+const selCropEl=document.getElementById('sel-crop');
+const hint=document.getElementById('hint');
+const modeBar=document.getElementById('mode-bar');
+const actionBar=document.getElementById('action-bar');
+const btnModeWm=document.getElementById('btn-mode-wm');
+const btnModeCrop=document.getElementById('btn-mode-crop');
+const btnRemove=document.getElementById('btn-remove');
+const btnCropExp=document.getElementById('btn-crop-export');
+const btnReset=document.getElementById('btn-reset');
+const progressWrap=document.getElementById('progress-wrap');
+const pbar=document.getElementById('pbar');
+const statusEl=document.getElementById('status');
+const dlWrap=document.getElementById('download-wrap');
+const dlBtn=document.getElementById('dl-btn');
+
+// ── File loading ──────────────────────────────────────────────────────────────
+fileInput.addEventListener('change', e => loadVideo(e.target.files[0]));
+dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag-over'); loadVideo(e.dataTransfer.files[0]); });
+
+function loadVideo(file) {
+  if (!file) return;
+  videoFile = file;
+  videoEl = document.createElement('video');
+  videoEl.src = URL.createObjectURL(file);
+  videoEl.muted = true;
+  videoEl.addEventListener('loadeddata', () => {
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    videoEl.currentTime = 0.1;
+    videoEl.addEventListener('seeked', () => {
+      canvas.getContext('2d').drawImage(videoEl, 0, 0);
+      dropZone.classList.add('hidden');
+      canvasWrap.style.display = 'block';
+      modeBar.classList.add('visible');
+      actionBar.classList.add('visible');
+      hint.style.display = 'block';
+      setMode('wm');
+    }, { once: true });
+  });
+  videoEl.load();
+}
+
+// ── Mode ──────────────────────────────────────────────────────────────────────
+btnModeWm.addEventListener('click', ()=>setMode('wm'));
+btnModeCrop.addEventListener('click', ()=>setMode('crop'));
+function setMode(m) {
+  mode = m;
+  if (m==='wm') {
+    btnModeWm.className='mode-btn active-wm';
+    btnModeCrop.className='mode-btn';
+    hint.textContent='🖱 Sélectionne la zone du watermark à effacer';
+    btnRemove.style.display=''; btnCropExp.style.display='none';
+    selCropEl.style.display='none'; selCrop=null;
+  } else {
+    btnModeCrop.className='mode-btn active-crop';
+    btnModeWm.className='mode-btn';
+    hint.textContent='✂️ Sélectionne la zone à GARDER dans la vidéo';
+    btnCropExp.style.display=''; btnRemove.style.display='none';
+    selWmEl.style.display='none'; selWm=null;
+  }
+}
+
+// ── Canvas selection ──────────────────────────────────────────────────────────
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / r.width;
+  const scaleY = canvas.height / r.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (clientX - r.left) * scaleX, y: (clientY - r.top) * scaleY,
+           px: clientX - r.left, py: clientY - r.top };
+}
+
+canvas.addEventListener('mousedown', e=>{ isDrawing=true; const p=getPos(e); startX=p.px; startY=p.py; });
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); isDrawing=true; const p=getPos(e); startX=p.px; startY=p.py; });
+canvas.addEventListener('mousemove', e=>{ if(!isDrawing) return; drawSel(getPos(e)); });
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); if(!isDrawing) return; drawSel(getPos(e)); });
+canvas.addEventListener('mouseup', e=>{ if(!isDrawing) return; isDrawing=false; commitSel(getPos(e)); });
+canvas.addEventListener('touchend', e=>{ if(!isDrawing) return; isDrawing=false;
+  const r=canvas.getBoundingClientRect();
+  const t=e.changedTouches[0];
+  commitSel({px:t.clientX-r.left, py:t.clientY-r.top}); });
+
+function drawSel(p) {
+  const el = mode==='wm' ? selWmEl : selCropEl;
+  const x=Math.min(startX,p.px), y=Math.min(startY,p.py);
+  const w=Math.abs(p.px-startX), h=Math.abs(p.py-startY);
+  el.style.cssText=`display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
+}
+
+function commitSel(p) {
+  const r=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/r.width, scaleY=canvas.height/r.height;
+  const x1=startX*scaleX, y1=startY*scaleY;
+  const x2=p.px*scaleX, y2=p.py*scaleY;
+  const x=Math.round(Math.min(x1,x2)), y=Math.round(Math.min(y1,y2));
+  const w=Math.round(Math.abs(x2-x1)), h=Math.round(Math.abs(y2-y1));
+  if(w<5||h<5) return;
+  if(mode==='wm'){selWm={x,y,w,h};btnRemove.disabled=false;}
+  else{selCrop={x,y,w,h};btnCropExp.disabled=false;}
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+btnReset.addEventListener('click', ()=>{
+  dropZone.classList.remove('hidden');
+  canvasWrap.style.display='none';
+  modeBar.classList.remove('visible');
+  actionBar.classList.remove('visible');
+  hint.style.display='none';
+  selWmEl.style.display='none'; selCropEl.style.display='none';
+  progressWrap.style.display='none'; dlWrap.style.display='none';
+  selWm=null;selCrop=null;videoFile=null;videoEl=null;
+  fileInput.value=''; btnRemove.disabled=true; btnCropExp.disabled=true;
+  pbar.style.width='0%';
+});
+
+// ── Process ───────────────────────────────────────────────────────────────────
+btnRemove.addEventListener('click', ()=>{ if(selWm) startProcess('wm'); });
+btnCropExp.addEventListener('click', ()=>{ if(selCrop) startProcess('crop'); });
+
+async function startProcess(type) {
+  setUIProcessing(true);
+  dlWrap.style.display='none';
+
+  if (ffmpegReady && ffmpeg) {
+    await processWithFFmpeg(type);
+  } else {
+    await processWithWebCodecs(type);
+  }
+}
+
+// ── FFmpeg processing (rapide) ────────────────────────────────────────────────
+async function processWithFFmpeg(type) {
+  try {
+    setStatus('📥 Lecture du fichier…', 5);
+    const { fetchFile } = FFmpeg;
+    ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
+
+    let filter = '';
+    if (type === 'wm' && selWm) {
+      const {x,y,w,h} = selWm;
+      // Blur zone du watermark
+      filter = `[0:v]split[main][copy];[copy]crop=${w}:${h}:${x}:${y},boxblur=20:5[blurred];[main][blurred]overlay=${x}:${y}[out]`;
+      setStatus('⚡ FFmpeg supprime le watermark…', 20);
+      await ffmpeg.run('-i','input.mp4','-filter_complex',filter,'-map','[out]','-map','0:a?','-c:a','copy','-c:v','libx264','-preset','ultrafast','-crf','23','output.mp4');
+    } else if (type === 'crop' && selCrop) {
+      const {x,y,w,h} = selCrop;
+      setStatus('⚡ FFmpeg recadre la vidéo…', 20);
+      await ffmpeg.run('-i','input.mp4','-vf',`crop=${w}:${h}:${x}:${y}`,'-c:a','copy','-c:v','libx264','-preset','ultrafast','-crf','23','output.mp4');
+    }
+
+    setStatus('📦 Finalisation…', 90);
+    const data = ffmpeg.FS('readFile', 'output.mp4');
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    dlBtn.href = URL.createObjectURL(blob);
+    dlBtn.download = 'output.mp4';
+    dlBtn.textContent = '⬇️ Télécharger output.mp4';
+    dlWrap.style.display = 'block';
+    setStatus('✅ Terminé !', 100);
+
+    // Nettoyage
+    ffmpeg.FS('unlink', 'input.mp4');
+    ffmpeg.FS('unlink', 'output.mp4');
+  } catch(e) {
+    setStatus('❌ Erreur FFmpeg, passage en fallback…', 0);
+    console.error(e);
+    await processWithWebCodecs(type);
+  }
+  setUIProcessing(false);
+}
+
+// ── WebCodecs fallback ────────────────────────────────────────────────────────
+async function processWithWebCodecs(type) {
+  const vw=videoEl.videoWidth, vh=videoEl.videoHeight;
+  let outW=vw, outH=vh;
+  if(type==='crop'&&selCrop){outW=selCrop.w;outH=selCrop.h;}
+  const encW=outW%2===0?outW:outW-1;
+  const encH=outH%2===0?outH:outH-1;
+  const off=document.createElement('canvas');
+  off.width=encW;off.height=encH;
+  const ctx=off.getContext('2d');
+  const useWC=typeof VideoEncoder!=='undefined';
+  let muxer,encoder,rec,chunks=[],stream;
+
+  if(useWC){
+    const {Muxer,ArrayBufferTarget}=await import('https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js');
+    muxer=new Muxer({target:new ArrayBufferTarget(),video:{codec:'avc',width:encW,height:encH,frameRate:30},fastStart:'in-memory'});
+    encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),error:e=>console.error(e)});
+    encoder.configure({codec:'avc1.42001f',width:encW,height:encH,framerate:30,bitrate:6_000_000});
+  } else {
+    const mimeType=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>MediaRecorder.isTypeSupported(m))||'video/webm';
+    stream=off.captureStream();
+    rec=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000});
+    rec.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data);};
+    rec.start(100);
+  }
+
+  let frameIdx=0;
+  const frameDur=1_000_000/30;
+  const duration=videoEl.duration;
+  let rafId,lastTime=-1;
+
+  function loop(){
+    const t=videoEl.currentTime;
+    if(t!==lastTime){
+      lastTime=t;
+      if(type==='crop'&&selCrop){
+        ctx.drawImage(videoEl,selCrop.x,selCrop.y,selCrop.w,selCrop.h,0,0,encW,encH);
+      } else {
+        ctx.drawImage(videoEl,0,0,encW,encH);
+        if(type==='wm'&&selWm){
+          const{x,y,w,h}=selWm;
+          const sy2=Math.max(0,y-2);
+          const sample=ctx.getImageData(x,sy2,Math.min(w,encW-x),2);
+          let r=0,g=0,b=0,cnt=0;
+          for(let i=0;i<sample.data.length;i+=4){r+=sample.data[i];g+=sample.data[i+1];b+=sample.data[i+2];cnt++;}
+          if(cnt>0){ctx.fillStyle=`rgb(${r/cnt|0},${g/cnt|0},${b/cnt|0})`;ctx.fillRect(x,y,w,h);}
+        }
+      }
+      if(useWC&&encoder.state==='configured'){
+        const vf=new VideoFrame(off,{timestamp:Math.round(frameIdx*frameDur),duration:Math.round(frameDur)});
+        if(encoder.encodeQueueSize<15)encoder.encode(vf,{keyFrame:frameIdx%60===0});
+        vf.close();frameIdx++;
+      }
+      setStatus(`⏱ ${t.toFixed(1)}s / ${duration.toFixed(1)}s`,Math.min(99,(t/duration)*100));
+    }
+    if(!videoEl.ended&&videoEl.currentTime<duration-0.05)rafId=requestAnimationFrame(loop);
+  }
+
+  videoEl.currentTime=0;
+  await new Promise(r=>{videoEl.onseeked=r;});
+  videoEl.playbackRate=16;videoEl.muted=true;
+  await new Promise(resolve=>{
+    videoEl.addEventListener('ended',resolve,{once:true});
+    videoEl.addEventListener('pause',()=>{if(videoEl.currentTime>=duration-0.1)resolve();});
+    videoEl.play().catch(()=>{});
+    rafId=requestAnimationFrame(loop);
+  });
+  cancelAnimationFrame(rafId);
+  setStatus('⏳ Finalisation…',99);
+
+  let blob;
+  if(useWC){
+    await encoder.flush();encoder.close();muxer.finalize();
+    blob=new Blob([muxer.target.buffer],{type:'video/mp4'});
+    dlBtn.download='output.mp4';dlBtn.textContent='⬇️ Télécharger output.mp4';
+  } else {
+    rec.stop();await new Promise(r=>rec.onstop=r);
+    blob=new Blob(chunks,{type:'video/webm'});
+    dlBtn.download='output.webm';dlBtn.textContent='⬇️ Télécharger output.webm';
+  }
+  dlBtn.href=URL.createObjectURL(blob);
+  dlWrap.style.display='block';
+  setStatus('✅ Terminé !',100);
+  setUIProcessing(false);
+}
+
+function setUIProcessing(on){
+  btnRemove.disabled=on;btnCropExp.disabled=on;btnReset.disabled=on;
+  progressWrap.style.display=on?'block':'none';
+  if(on){pbar.style.width='0%';statusEl.textContent='';}
+}
+function setStatus(msg,pct){
+  statusEl.textContent=msg;
+  if(pct!==undefined)pbar.style.width=Math.min(100,pct)+'%';
+}
+</script>
+</body>
+</html>
